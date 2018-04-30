@@ -3,7 +3,7 @@ PeParser is check static analysis on PE(Portable Executable) File
 
 
 ## Update
-* 2018-05-01: Print Entropy of Sections
+* 2018-05-01: Print Sections Entropy
 * 2018-04-30: Support x64
 * 2018-04-26: first version
 
