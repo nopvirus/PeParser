@@ -6,6 +6,7 @@ BYTE = ctypes.c_byte
 WORD = ctypes.c_ushort
 ULONG = ctypes.c_uint32
 LONG = ctypes.c_int32
+DOUBLE = ctypes.c_double
 
 class IMAGE_DOS_HEADER(ctypes.Structure):
     _fields_ = [
@@ -75,6 +76,42 @@ class IMAGE_OPTIONAL_HEADER32(ctypes.Structure):
         ('NumberOfRvaAndSizes',LONG),
     ]
 
+
+class IMAGE_OPTIONAL_HEADER64(ctypes.Structure):
+    _fields_ = [
+        ('Magic',WORD),
+        ('MajorLinkerVersion',BYTE),
+        ('MinorLinkerVersion',BYTE),
+        ('SizeOfCode',LONG),
+        ('SizeOfInitializedData',LONG),
+        ('SizeOfUninitializedData',LONG),
+        ('AddressOfEntryPoint',LONG),
+        ('BaseOfCode',LONG),
+        ('BaseOfData',LONG),
+        ('ImageBase',DOUBLE),
+        ('SectionAlignment',LONG),
+        ('FileAlignment',LONG),
+        ('MajorOperatingSystemVersion',WORD),
+        ('MinorOperatingSystemVersion',WORD),
+        ('MajorImageVersion',WORD),
+        ('MinorImageVersion',WORD),
+        ('MajorSubsystemVersion',WORD),
+        ('MinorSubsystemVersion',WORD),
+        ('Win32VersionValue',LONG),
+        ('SizeOfImage',LONG),
+        ('SizeOfHeaders',LONG),
+        ('CheckSum',LONG),
+        ('Subsystem',WORD),
+        ('DllCharacteristics',WORD),
+        ('SizeOfStackReserve',DOUBLE),
+        ('SizeOfStackCommit',DOUBLE),
+        ('SizeOfHeapReserve',DOUBLE),
+        ('SizeOfHeapCommit',DOUBLE),
+        ('LoaderFlags',LONG),
+        ('NumberOfRvaAndSizes',LONG),
+    ]
+
+
 class IMAGE_SECTION_HEADER(ctypes.Structure):
     _fields_ = [
         ('Name',BYTE*8),
@@ -109,11 +146,16 @@ class PeParser():
     'NumberOfLinenumbers':0,
     'Characteristics':0
     }
+
     __dos_sig__ = 0x5a4d
     __nt_sig__ = 0x00004550
 
+    __opt_x32__ = 0x010b
+    __opt_x64__ = 0x020b
+
     filesize = 0
     fname = ""
+    Is32Bit = False
 
 
     def __GetDword__(self, buff, off):
@@ -138,7 +180,10 @@ class PeParser():
             for ElmtList in _format._fields_:
                 Elmt = ElmtList[0]
                 self.OPTIONAL_HEADER[Elmt] = _data.__getattribute__(Elmt)
-
+        elif _type == 4:
+            for ElmtList in _format._fields_:
+                Elmt = ElmtList[0]
+                self.OPTIONAL_HEADER[Elmt] = _data.__getattribute__(Elmt)
 
     def RvatoRaw(self, Rva):
         for _section in self.SECTION_HEADER:
@@ -163,10 +208,12 @@ class PeParser():
         _DosHdr_size = ctypes.sizeof(IMAGE_DOS_HEADER)
         _FileHdr_size = ctypes.sizeof(IMAGE_FILE_HEADER)
         _Opt32Hdr_size = ctypes.sizeof(IMAGE_OPTIONAL_HEADER32)
+        _Opt64Hdr_size = ctypes.sizeof(IMAGE_OPTIONAL_HEADER64)
 
         _Dos_hdr = IMAGE_DOS_HEADER()
         _File_hdr = IMAGE_FILE_HEADER()
         _Opt32_hdr = IMAGE_OPTIONAL_HEADER32()
+        _Opt64_hdr = IMAGE_OPTIONAL_HEADER64()
 
         #Read Dos Header
         ctypes.memmove(ctypes.addressof(_Dos_hdr),buff, _DosHdr_size)
@@ -195,10 +242,22 @@ class PeParser():
         #offset to Optional header
         off += _FileHdr_size
 
-        ctypes.memmove(ctypes.addressof(_Opt32_hdr), buff[off:], _Opt32Hdr_size)
-        self.__Convert__(IMAGE_OPTIONAL_HEADER32(), _Opt32_hdr, 3)
+        magic = self.__GetWord__(buff, off)
+        if magic == self.__opt_x32__:
+            self.Is32Bit = True
+        elif magic == self.__opt_x64__:
+            self.Is32Bit = False
 
-        Imsi = off + _Opt32Hdr_size
+
+        if self.Is32Bit == True:
+            ctypes.memmove(ctypes.addressof(_Opt32_hdr), buff[off:], _Opt32Hdr_size)
+            self.__Convert__(IMAGE_OPTIONAL_HEADER32(), _Opt32_hdr, 3)
+            Imsi = off + _Opt32Hdr_size
+        else:
+            ctypes.memmove(ctypes.addressof(_Opt64_hdr), buff[off:], _Opt64Hdr_size)
+            self.__Convert__(IMAGE_OPTIONAL_HEADER64(), _Opt64_hdr, 4)
+            Imsi = off + _Opt64Hdr_size
+
 
         for i in xrange(0, self.OPTIONAL_HEADER['NumberOfRvaAndSizes']):
             self.__DATA_DIRECTORY_Struct__['VirtualAddress'] = self.__GetDword__(buff, Imsi)
@@ -206,21 +265,21 @@ class PeParser():
             self.DATA_DIRECTORY.append(self.__DATA_DIRECTORY_Struct__.copy())  #do not ref copy
             Imsi += 8
 
-        off = Imsi
+        off = off + self.FILE_HEADER['SizeOfOptionalHeader']
 
         for i in xrange(0, self.FILE_HEADER['NumberOfSections']):
-            self.__SECTION_HEADER_Struct__['Name'] = buff[Imsi:Imsi+8]
-            self.__SECTION_HEADER_Struct__['VirtualSize'] = self.__GetDword__(buff, Imsi+8)
-            self.__SECTION_HEADER_Struct__['RVA'] = self.__GetDword__(buff, Imsi+12)
-            self.__SECTION_HEADER_Struct__['SizeOfRawData'] = self.__GetDword__(buff, Imsi+16)
-            self.__SECTION_HEADER_Struct__['PointerToRawData'] = self.__GetDword__(buff, Imsi+20)
-            self.__SECTION_HEADER_Struct__['PointerToRelocations'] = self.__GetDword__(buff, Imsi+24)
-            self.__SECTION_HEADER_Struct__['PointerToLinenumbers'] = self.__GetDword__(buff, Imsi+28)
-            self.__SECTION_HEADER_Struct__['NumberOfRelocations'] = self.__GetWord__(buff, Imsi+32)
-            self.__SECTION_HEADER_Struct__['NumberOfLinenumbers'] = self.__GetWord__(buff, Imsi+34)
-            self.__SECTION_HEADER_Struct__['Characteristics'] = self.__GetDword__(buff, Imsi+36)
+            self.__SECTION_HEADER_Struct__['Name'] = buff[off:off+8]
+            self.__SECTION_HEADER_Struct__['VirtualSize'] = self.__GetDword__(buff, off+8)
+            self.__SECTION_HEADER_Struct__['RVA'] = self.__GetDword__(buff, off+12)
+            self.__SECTION_HEADER_Struct__['SizeOfRawData'] = self.__GetDword__(buff, off+16)
+            self.__SECTION_HEADER_Struct__['PointerToRawData'] = self.__GetDword__(buff, off+20)
+            self.__SECTION_HEADER_Struct__['PointerToRelocations'] = self.__GetDword__(buff, off+24)
+            self.__SECTION_HEADER_Struct__['PointerToLinenumbers'] = self.__GetDword__(buff, off+28)
+            self.__SECTION_HEADER_Struct__['NumberOfRelocations'] = self.__GetWord__(buff, off+32)
+            self.__SECTION_HEADER_Struct__['NumberOfLinenumbers'] = self.__GetWord__(buff, off+34)
+            self.__SECTION_HEADER_Struct__['Characteristics'] = self.__GetDword__(buff, off+36)
             self.SECTION_HEADER.append(self.__SECTION_HEADER_Struct__.copy())
-            Imsi += 40
+            off += 40
 
         return self
 
@@ -246,7 +305,10 @@ def PrintPeInfo(filename):
     for i in xrange(0,Info.FILE_HEADER['NumberOfSections']):
         print ' -> Section %d' %(i)
         for Section in Info.SECTION_HEADER[i]:
-            print '%s : %s'%(Section, Info.SECTION_HEADER[i][Section])
+            if Section == "Name":
+                print '%s : %s'%(Section, Info.SECTION_HEADER[i][Section])
+            else:
+                print '%s : %x'%(Section, Info.SECTION_HEADER[i][Section])
         print '\n'
 
 def main(filename):
