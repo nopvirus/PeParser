@@ -1,6 +1,8 @@
 import sys
 import struct
 import ctypes
+import math
+import argparse
 
 BYTE = ctypes.c_byte
 WORD = ctypes.c_ushort
@@ -283,6 +285,16 @@ class PeParser():
 
         return self
 
+    def GetEntropy(self, data):
+        if not data:
+            return 0
+        entropy = 0
+        for x in range(256):
+            p_x = float(data.count(chr(x)))/len(data)
+            if p_x > 0:
+                entropy += - p_x*math.log(p_x, 2)
+        return round(entropy, 2)    #roundup 6.135 -> 6.14
+
 def helpcmd():
     print "CMD> %s filename" % (sys.argv[0])
 
@@ -311,12 +323,35 @@ def PrintPeInfo(filename):
                 print '%s : %x'%(Section, Info.SECTION_HEADER[i][Section])
         print '\n'
 
-def main(filename):
-    PrintPeInfo(filename)
+def PrintSectionInfo(filename):
+    Pe = PeParser()
+    Info = Pe.Parse(fname = filename)
+
+    f = open(filename, 'rb')
+    buff = f.read();
+    f.close()
+
+    print '[*] IMAGE_SECTION_HEADER Information'
+    print '{:^8} {:^8} {:^8} {:^10} {:^10}'.format("Name", "RVA", "VirSize", "RawSize", "entropy")
+    for i in xrange(0,Info.FILE_HEADER['NumberOfSections']):
+        Offset = Info.SECTION_HEADER[i]['PointerToRawData']
+        Size = Info.SECTION_HEADER[i]['SizeOfRawData']
+        SectionData = buff[Offset : Offset + Size]
+        Entropy =  Pe.GetEntropy(SectionData)
+        #print '%s %x %x %x %x' % (Info.SECTION_HEADER[i]['Name'] ,Info.SECTION_HEADER[i]['RVA'] ,Info.SECTION_HEADER[i]['VirtualSize']. Info.SECTION_HEADER[i]['SizeOfRawData'], Entropy)
+        #print '%s {:>8%x} %x %x %f' % (Info.SECTION_HEADER[i]['Name'], Info.SECTION_HEADER[i]['RVA'], Info.SECTION_HEADER[i]['VirtualSize'], Info.SECTION_HEADER[i]['SizeOfRawData'] ,Entropy)
+        print '{:>8} {:>8} {:>8} {:>8} {:>8}'.format(Info.SECTION_HEADER[i]['Name'], hex(Info.SECTION_HEADER[i]['RVA']), hex(Info.SECTION_HEADER[i]['VirtualSize']), hex(Info.SECTION_HEADER[i]['SizeOfRawData']) ,Entropy)
+
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        helpcmd()
-        sys.exit(1)
-
-    main(sys.argv[1])
+    parse = argparse.ArgumentParser()
+    parse.add_argument("-s",  help="Print Section info", action="store_true")
+    parse.add_argument("-p",  help="Print Defalt PE info", action="store_true")
+    parse.add_argument("-f", type=str, metavar="filename", help="target filename", required = True)
+    args = parse.parse_args()
+    if args.s:
+        PrintSectionInfo(args.f)
+    elif args.p:
+        PrintPeInfo(args.f)
+    else:
+        print 'Argument Error'
