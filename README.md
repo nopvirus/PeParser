@@ -8,10 +8,10 @@ PeParser is check static analysis on PE(Portable Executable) File
 
 
 ## Usage
-`
+```
 PeParser.py <filename>
-`
 
+PeParser.py kernel32.dll
 
-
-
+PeParser.py malware.exe
+```
