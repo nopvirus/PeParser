@@ -166,8 +166,15 @@ class PeParser():
     def __GetWord__(self, buff, off):
         return struct.unpack("<H", buff[off:off+2])[0]
 
-    def __init__(self):
-        return None
+    def __init__(self, name=None):
+        if name is None:
+            raise ValueError('Need to filename')
+
+        try:
+            self.__Parse__(name)
+        except:
+            return
+
 
     def __Convert__(self, _format, _data, _type):
         if _type == 1:
@@ -196,12 +203,12 @@ class PeParser():
         return None
 
 
-    def Parse(self, fname = None):
-        if fname == None:
+    def __Parse__(self, name = None):
+        if name == None:
             print "Need to filename"
             return None
 
-        f = open(fname,'rb')
+        f = open(name,'rb')
         buff= f.read()
         f.close()
 
@@ -224,6 +231,7 @@ class PeParser():
         if self.DOS_HEADER['e_magic'] != self.__dos_sig__:
             print 'dos signature not a match'
             return None
+
 
         off = self.DOS_HEADER['e_lfanew']
 
@@ -283,7 +291,7 @@ class PeParser():
             self.SECTION_HEADER.append(self.__SECTION_HEADER_Struct__.copy())
             off += 40
 
-        return self
+        return
 
     def GetEntropy(self, data):
         if not data:
@@ -299,8 +307,8 @@ def helpcmd():
     print "CMD> %s filename" % (sys.argv[0])
 
 def PrintPeInfo(filename):
-    Pe = PeParser()
-    Info = Pe.Parse(fname = filename)
+    Info = PeParser(name = filename)
+
     print '[*] IMAGE_DOS_HEADER:'
     print '\te_lfanew:%s' % (Info.DOS_HEADER['e_lfanew'])
 
@@ -324,8 +332,7 @@ def PrintPeInfo(filename):
         print '\n'
 
 def PrintSectionInfo(filename):
-    Pe = PeParser()
-    Info = Pe.Parse(fname = filename)
+    Info = PeParser(name = filename)
 
     f = open(filename, 'rb')
     buff = f.read();
@@ -337,7 +344,7 @@ def PrintSectionInfo(filename):
         Offset = Info.SECTION_HEADER[i]['PointerToRawData']
         Size = Info.SECTION_HEADER[i]['SizeOfRawData']
         SectionData = buff[Offset : Offset + Size]
-        Entropy =  Pe.GetEntropy(SectionData)
+        Entropy =  Info.GetEntropy(SectionData)
         #print '%s %x %x %x %x' % (Info.SECTION_HEADER[i]['Name'] ,Info.SECTION_HEADER[i]['RVA'] ,Info.SECTION_HEADER[i]['VirtualSize']. Info.SECTION_HEADER[i]['SizeOfRawData'], Entropy)
         #print '%s {:>8%x} %x %x %f' % (Info.SECTION_HEADER[i]['Name'], Info.SECTION_HEADER[i]['RVA'], Info.SECTION_HEADER[i]['VirtualSize'], Info.SECTION_HEADER[i]['SizeOfRawData'] ,Entropy)
         print '{:>8} {:>8} {:>8} {:>8} {:>8}'.format(Info.SECTION_HEADER[i]['Name'], hex(Info.SECTION_HEADER[i]['RVA']), hex(Info.SECTION_HEADER[i]['VirtualSize']), hex(Info.SECTION_HEADER[i]['SizeOfRawData']) ,Entropy)
